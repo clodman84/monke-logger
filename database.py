@@ -105,11 +105,15 @@ def view_themes(conn=None) -> list[str]:
         return list(itertools.chain(*cursor.fetchall()))
 
 
-def view_benchmarks(theme: str, conn=None) -> list[Benchmark]:
+def view_benchmarks(theme: str, conn=None) -> list[list[Benchmark]]:
     with conn if conn else connect() as connection:
-        cursor = connection.execute(f"SELECT * FROM {theme}_benchmarks")
+        cursor = connection.execute(f"SELECT * FROM {theme}_benchmarks ORDER BY name")
         benchmarks = [Benchmark(theme, *row) for row in cursor.fetchall()]
-    return benchmarks
+    # splitting the benchmarks by name
+    sorted_benchmarks = [
+        list(group) for _, group in itertools.groupby(benchmarks, key=lambda x: x.name)
+    ]
+    return sorted_benchmarks
 
 
 def view_records(theme: str) -> list[Record]:
