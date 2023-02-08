@@ -4,7 +4,7 @@ from tkinter import ttk
 import database
 
 
-class BenchmarkTable(ttk.Frame):
+class BenchmarkTable(tk.Frame):
     def __init__(self, *args, theme, **kwargs):
         super(BenchmarkTable, self).__init__(*args, **kwargs)
         self.theme = theme
@@ -50,7 +50,7 @@ class BenchmarkTable(ttk.Frame):
                 )
 
 
-class RecordTable(ttk.Frame):
+class RecordTable(tk.Frame):
     def __init__(self, *args, theme, **kwargs):
         super(RecordTable, self).__init__(*args, **kwargs)
         self.theme = theme
@@ -100,20 +100,18 @@ class Page(tk.Frame):
 class App(tk.Frame):
     def __init__(self, master):
         super(App, self).__init__(master)
-        self.note_book = ttk.Notebook(master=self.master)
-        for theme in database.view_themes():
-            page = Page(master=self.note_book, theme=theme)
-            page.pack()
-            self.note_book.add(page, text=theme)
-        self.note_book.grid(column=0, row=0, sticky="nw")
 
 
 def main():
-
     root = tk.Tk()
-    root.columnconfigure(0, weight=1)
-    my_app = App(root)
-    my_app.mainloop()
+    note_book = ttk.Notebook(master=root)
+    for theme in database.view_themes():
+        page = Page(master=note_book, theme=theme)
+        page.grid(column=0, row=0, sticky="ew")
+        note_book.add(page, text=theme.capitalize())
+    note_book.grid(column=0, row=0, sticky="ew")
+    root.resizable(False, False)
+    root.mainloop()
 
 
 if __name__ == "__main__":
