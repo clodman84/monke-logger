@@ -1,7 +1,5 @@
-import functools
 import itertools
 import sqlite3
-import time
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -28,8 +26,8 @@ def connect() -> sqlite3.Connection:
 
 @dataclass()
 class Benchmark:
-    theme: str
     datetime: datetime
+    theme: str
     name: str
     value: float
 
@@ -66,17 +64,6 @@ class Record:
         return f"{self.datetime.strftime('%d/%m/%Y %H:%M:%S')} | {self.theme} | {self.values}"
 
 
-def record_factory(theme, cursor: sqlite3.Cursor, row: tuple) -> Record:
-    values = {}
-    time = row[0]
-    for idx, col in enumerate(cursor.description):
-        column_name = col[0]
-        if column_name == "timestamp":
-            continue
-        values[col[0]] = row[idx]
-    return Record(theme, time, values)
-
-
 def create_theme(theme: str, conn=None) -> None:
     with conn if conn else connect() as connection:
         connection.execute("INSERT OR IGNORE INTO themes VALUES(?)", (theme,))
@@ -105,8 +92,11 @@ def view_themes(conn=None) -> list[str]:
 
 def view_benchmarks(theme: str, conn=None) -> list[list[Benchmark]]:
     with conn if conn else connect() as connection:
-        cursor = connection.execute(f"SELECT * FROM {theme}_benchmarks ORDER BY name")
-        benchmarks = [Benchmark(theme, *row) for row in cursor.fetchall()]
+        cursor = connection.execute(
+            f"SELECT * FROM benchmarks WHERE theme = ? ORDER BY benchmark_name",
+            (theme,),
+        )
+        benchmarks = [Benchmark(*row) for row in cursor.fetchall()]
     # splitting the benchmarks by name
     sorted_benchmarks = [
         list(group) for _, group in itertools.groupby(benchmarks, key=lambda x: x.name)
@@ -116,11 +106,16 @@ def view_benchmarks(theme: str, conn=None) -> list[list[Benchmark]]:
 
 def view_records(theme: str) -> list[Record]:
     with connect() as connection:
-        connection.row_factory = functools.partial(record_factory, theme)
-        cursor = connection.execute(f"SELECT * FROM {theme}_records")
+        cursor = connection.execute(
+            f"SELECT * FROM records WHERE theme = ? ORDER BY timestamp", (theme,)
+        )
         records = list(cursor.fetchall())
+    grouped_records_by_timestamp = [
+        Record(theme, t, {x[2]: x[3] for x in group})
+        for t, group in itertools.groupby(records, key=lambda x: x[0])
+    ]
     connection.close()
-    return records
+    return grouped_records_by_timestamp
 
 
 def setup_db():
@@ -131,39 +126,5 @@ def setup_db():
     connection.close()
 
 
-def fill_it_with_junk():
-    create_theme("exercise")  # <- This is how you make a theme
-    create_record("exercise", "arms")  # <- Records store daily activities
-    create_record("exercise", "shoulder")  # !! Records should be made only once !!
-    for _ in range(5):
-        # Records objects are responsible for dealing with this data.
-        # Create one of these with a theme, a date, and a dictionary storing the values you want to write
-        # In this case, the dictionary store the 'intensity' or something, the numbers are given meaning by
-        # the user.
-        # r = Record(<theme>, <time>, <values>)
-        # then r.write_record() will write the data into the database.
-        time.sleep(1)
-        Record("exercise", datetime.now(), {"arms": 10, "shoulder": 15}).write_record()
-
-    # you can create multiple themes
-    create_theme("study")
-    create_record("study", "maths")
-    create_record("study", "chemistry")
-    for _ in range(5):
-        time.sleep(1)
-        Record("study", datetime.now(), {"maths": 10, "chemistry": 15}).write_record()
-
-    create_benchmark("exercise", "pushups")
-    create_benchmark("study", "Mock Test")
-
-    # Benchmarks only have one value and can be anything, you do not have to create a record for these
-    for _ in range(10):
-        Benchmark("exercise", datetime.now(), "pushups", 10).write_benchmark()
-
-    for i in range(10):
-        Benchmark("study", datetime.now(), f"Mock Test", 100).write_benchmark()
-
-
 if __name__ == "__main__":
     setup_db()
-    fill_it_with_junk()
