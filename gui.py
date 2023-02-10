@@ -10,12 +10,6 @@ class RecordEntry(tk.Frame):
         self.theme = theme
 
 
-class BenchmarkEntry(tk.Frame):
-    def __init__(self, *args, theme, **kwargs):
-        super(BenchmarkEntry, self).__init__(*args, **kwargs)
-        self.theme = theme
-
-
 class BenchmarkTable(tk.Frame):
     def __init__(self, *args, theme, **kwargs):
         super(BenchmarkTable, self).__init__(*args, **kwargs)
@@ -107,11 +101,29 @@ class Page(tk.Frame):
         self.theme = theme
         self.record_table = RecordTable(theme=theme, master=self)
         self.benchmark_table = BenchmarkTable(theme=theme, master=self)
+
+        self.bench_name_entry = tk.Entry(self)
+        self.bench_name = tk.StringVar()
+        self.bench_name_entry["textvariable"] = self.bench_name
+
+        self.bench_value_entry = tk.Entry(self)
+        self.bench_value = tk.StringVar()
+        self.bench_value_entry["textvariable"] = self.bench_value
+
         self.setup_gui()
 
     def setup_gui(self):
         self.record_table.grid(column=0, row=0)
-        self.benchmark_table.grid(column=1, row=0)
+        self.benchmark_table.grid(column=1, row=0, columnspan=5)
+
+        tk.Label(self, text="Name: ").grid(column=1, row=1)
+        self.bench_name_entry.grid(column=2, row=1)
+        tk.Label(self, text="Value: ").grid(column=3, row=1)
+        self.bench_value_entry.grid(column=4, row=1)
+        tk.Button(self, command=self.add_benchmark, text="Add").grid(column=5, row=1)
+
+    def add_benchmark(self):
+        pass
 
 
 class App(tk.Frame):
