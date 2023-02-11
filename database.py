@@ -32,8 +32,8 @@ class Benchmark:
     value: float
 
     def write_benchmark(self, conn=None):
-        # look into adapters and convertors and all that later for this, maybe a __conform__ or something
         with conn if conn else connect() as connection:
+            create_benchmark(self.theme, self.name, connection)
             connection.execute(
                 f"INSERT INTO benchmarks VALUES(?, ?, ?, ?)",
                 (self.datetime, self.theme, self.name, self.value),
@@ -87,13 +87,13 @@ def create_benchmark(theme, name, conn=None) -> None:
 def view_themes(conn=None) -> list[str]:
     with conn if conn else connect() as connection:
         cursor = connection.execute("SELECT * FROM themes;")
-        return list(itertools.chain(*cursor.fetchall()))
+    return list(itertools.chain(*cursor.fetchall()))
 
 
 def view_benchmarks(theme: str, conn=None) -> list[list[Benchmark]]:
     with conn if conn else connect() as connection:
         cursor = connection.execute(
-            f"SELECT * FROM benchmarks WHERE theme = ? ORDER BY benchmark_name",
+            f"SELECT * FROM benchmarks WHERE theme = ? ORDER BY benchmark_name, timestamp DESC",
             (theme,),
         )
         benchmarks = [Benchmark(*row) for row in cursor.fetchall()]
@@ -109,13 +109,20 @@ def view_records(theme: str) -> list[Record]:
         cursor = connection.execute(
             f"SELECT * FROM records WHERE theme = ? ORDER BY timestamp", (theme,)
         )
-        records = list(cursor.fetchall())
     grouped_records_by_timestamp = [
         Record(theme, t, {x[2]: x[3] for x in group})
-        for t, group in itertools.groupby(records, key=lambda x: x[0])
+        for t, group in itertools.groupby(cursor.fetchall(), key=lambda x: x[0])
     ]
     connection.close()
     return grouped_records_by_timestamp
+
+
+def view_record_types(theme: str, conn=None):
+    with conn if conn else connect() as connection:
+        cursor = connection.execute(
+            "SELECT record_name from themes_records_bridge WHERE theme = ?", (theme,)
+        )
+    return list(itertools.chain(*cursor.fetchall()))
 
 
 def setup_db():
@@ -127,4 +134,5 @@ def setup_db():
 
 
 if __name__ == "__main__":
+    Record("exercise", datetime.now(), {"arms": 10}).write_record()
     setup_db()

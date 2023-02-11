@@ -1,4 +1,5 @@
 import tkinter as tk
+from datetime import datetime
 from tkinter import ttk
 
 import database
@@ -16,37 +17,44 @@ class BenchmarkTable(tk.Frame):
         self.theme = theme
         self.tree = ttk.Treeview(self)
         self.tree.pack(side="left", expand=True, fill="both")
+        self.scroll_bar = ttk.Scrollbar(
+            self, orient="vertical", command=self.tree.yview
+        )
+        self.scroll_bar.pack(side="right", fill="y")
+        self.setup_tree()
+        self.insert_data()
 
-        scroll_bar = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scroll_bar.set)
-        scroll_bar.pack(side="right", fill="y")
+    def clear(self):
+        self.tree.delete(*self.tree.get_children())
+        self.tree.destroy()
+        self.tree = ttk.Treeview(self)
+        self.tree.pack(side="left", expand=True, fill="both")
+        self.setup_tree()
 
-        self.refresh()
-
-    def refresh(self):
-        data: list[list[database.Benchmark]] = database.view_benchmarks(self.theme)
-        if len(data) == 0:
-            return
-
+    def setup_tree(self):
+        self.tree.configure(yscrollcommand=self.scroll_bar.set)
         self.tree["columns"] = ("date", "value")
-
         self.tree.column("date", width=120, anchor="w")
         self.tree.column("value", width=90, anchor="w")
-
         self.tree.heading("date", text="Date")
         self.tree.heading("value", text="Value")
 
+    def insert_data(self):
+        data: list[list[database.Benchmark]] = database.view_benchmarks(self.theme)
+
+        if len(data) == 0:
+            return
+
         for activity in data:
-            sample = activity[-1]
+            sample = activity[0]
             average = sum(bench.value for bench in activity) / len(activity)
-            # the values here can be something useful, like the average or the last time you did something
             root_node = self.tree.insert(
                 "",
                 text=sample.name,
                 index="end",
                 values=(
                     "Last: " + sample.datetime.strftime("%d/%m/%Y"),
-                    f"Average: {average}",
+                    f"Average: {average:.2f}",
                 ),
             )
             for benchmark in activity:
@@ -58,6 +66,10 @@ class BenchmarkTable(tk.Frame):
                     values=(date, benchmark.value),
                 )
 
+    def refresh(self):
+        self.clear()
+        self.insert_data()
+
 
 class RecordTable(tk.Frame):
     def __init__(self, *args, theme, **kwargs):
@@ -65,25 +77,31 @@ class RecordTable(tk.Frame):
         self.theme = theme
         self.tree = ttk.Treeview(self, selectmode="browse")
         self.tree.pack(side="left", expand=True, fill="both")
-        scroll_bar = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        self.scroll_bar = ttk.Scrollbar(
+            self, orient="vertical", command=self.tree.yview
+        )
+        self.scroll_bar.pack(side="right", fill="y")
+        self.insert_data()
 
-        scroll_bar.pack(side="right", fill="y")
-        self.tree.configure(yscrollcommand=scroll_bar.set)
-        self.refresh()
+    def clear(self):
+        self.tree.destroy()
+        self.tree = ttk.Treeview(self, selectmode="browse")
+        self.tree.pack(side="left", expand=True, fill="both")
 
-    def refresh(self):
-        data = database.view_records(self.theme)
-        if len(data) == 0:
-            return
-        sample: database.Record = data[0]
-
+    def setup_tree(self, headings):
+        self.tree.configure(yscrollcommand=self.scroll_bar.set)
         # creating the headings and all that
-        headings = tuple(sample.values.keys())
         self.tree["columns"] = ("date", *(str(i) for i in range(len(headings))))
         self.tree["show"] = "headings"
         self.tree.column("date", width=120, anchor="w")
         self.tree.heading("date", text="Date")
 
+    def insert_data(self):
+        data = database.view_records(self.theme)
+        if len(data) == 0:
+            return
+        headings = database.view_record_types(self.theme)
+        self.setup_tree(headings)
         # adding the headings for Record.values dictionary
         for i, heading in enumerate(headings):
             self.tree.column(str(i), width=90, anchor="c")
@@ -92,7 +110,13 @@ class RecordTable(tk.Frame):
         # writing the data
         for record in data:
             date = record.datetime.strftime("%d/%m/%Y %H:%M:%S")
-            self.tree.insert("", "end", values=(date, *record.values.values()))
+            self.tree.insert(
+                "", "end", values=(date, *(record.values.get(key) for key in headings))
+            )
+
+    def refresh(self):
+        self.clear()
+        self.insert_data()
 
 
 class Page(tk.Frame):
@@ -102,14 +126,11 @@ class Page(tk.Frame):
         self.record_table = RecordTable(theme=theme, master=self)
         self.benchmark_table = BenchmarkTable(theme=theme, master=self)
 
+        self.int_validation = self.register(lambda x: str.isdigit(x) or x == "")
         self.bench_name_entry = tk.Entry(self)
-        self.bench_name = tk.StringVar()
-        self.bench_name_entry["textvariable"] = self.bench_name
-
-        self.bench_value_entry = tk.Entry(self)
-        self.bench_value = tk.StringVar()
-        self.bench_value_entry["textvariable"] = self.bench_value
-
+        self.bench_value_entry = tk.Entry(
+            self, validate="all", validatecommand=(self.int_validation, "%P")
+        )
         self.setup_gui()
 
     def setup_gui(self):
@@ -123,7 +144,13 @@ class Page(tk.Frame):
         tk.Button(self, command=self.add_benchmark, text="Add").grid(column=5, row=1)
 
     def add_benchmark(self):
-        pass
+        database.Benchmark(
+            datetime.now(),
+            self.theme,
+            self.bench_name_entry.get(),
+            int(self.bench_value_entry.get()),
+        ).write_benchmark()
+        self.benchmark_table.refresh()
 
 
 class App(tk.Frame):
