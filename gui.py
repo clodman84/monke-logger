@@ -127,21 +127,31 @@ class Page(tk.Frame):
         self.benchmark_table = BenchmarkTable(theme=theme, master=self)
 
         self.int_validation = self.register(lambda x: str.isdigit(x) or x == "")
+
         self.bench_name_entry = tk.Entry(self)
         self.bench_value_entry = tk.Entry(
             self, validate="all", validatecommand=(self.int_validation, "%P")
         )
+        self.record_name_entry = tk.Entry(self)
         self.setup_gui()
 
     def setup_gui(self):
-        self.record_table.grid(column=0, row=0)
-        self.benchmark_table.grid(column=1, row=0, columnspan=5)
+        self.record_table.grid(column=0, row=0, columnspan=3)
+        self.benchmark_table.grid(column=4, row=0, columnspan=5)
 
-        tk.Label(self, text="Name: ").grid(column=1, row=1)
-        self.bench_name_entry.grid(column=2, row=1)
-        tk.Label(self, text="Value: ").grid(column=3, row=1)
-        self.bench_value_entry.grid(column=4, row=1)
-        tk.Button(self, command=self.add_benchmark, text="Add").grid(column=5, row=1)
+        self.record_name_entry.grid(column=0, row=1, sticky="ew")
+        tk.Button(self, command=self.create_record, text="Create Record").grid(
+            column=1, row=1, sticky="w"
+        )
+        tk.Button(self, command=self.create_record, text="Add").grid(
+            column=2, row=1, sticky="w"
+        )
+
+        tk.Label(self, text="Name: ").grid(column=4, row=1)
+        self.bench_name_entry.grid(column=5, row=1)
+        tk.Label(self, text="Value: ").grid(column=6, row=1)
+        self.bench_value_entry.grid(column=7, row=1)
+        tk.Button(self, command=self.add_benchmark, text="Add").grid(column=8, row=1)
 
     def add_benchmark(self):
         database.Benchmark(
@@ -152,10 +162,10 @@ class Page(tk.Frame):
         ).write_benchmark()
         self.benchmark_table.refresh()
 
-
-class App(tk.Frame):
-    def __init__(self, master):
-        super(App, self).__init__(master)
+    def create_record(self):
+        name = self.record_name_entry.get()
+        database.create_record(self.theme, name)
+        self.record_table.refresh()
 
 
 def main():
@@ -169,6 +179,7 @@ def main():
         note_book.add(page, text=theme.capitalize())
 
     new_theme_frame = tk.Frame(note_book)
+
     label = tk.Label(new_theme_frame, text="Enter Theme: ")
     text_box = tk.Entry(new_theme_frame)
     text_box.grid(column=1, row=0)
