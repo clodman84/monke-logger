@@ -132,8 +132,7 @@ class RecordTable(tk.Frame):
     def insert_data(self):
         data = database.view_records(self.theme)
         if len(data) == 0:
-            self.tree.insert("", "end", values=("",))
-            return
+            self.tree.insert("", "end", values=("Nothing to show...",))
         headings = database.view_record_types(self.theme)
         self.setup_tree(headings)
         # adding the headings for Record.values dictionary
