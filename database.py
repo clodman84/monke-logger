@@ -133,6 +133,5 @@ def setup_db():
     connection.close()
 
 
-if __name__ == "__main__":
-    Record("exercise", datetime.now(), {"arms": 10}).write_record()
-    setup_db()
+# this is out here on purpose
+setup_db()

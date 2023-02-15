@@ -5,10 +5,43 @@ from tkinter import ttk
 import database
 
 
-class RecordEntry(tk.Frame):
-    def __init__(self, *args, theme, **kwargs):
-        super(RecordEntry, self).__init__(*args, **kwargs)
+class RecordEntry:
+    def __init__(self, theme):
+        self.root = tk.Toplevel()
+        self.root.resizable(False, False)
         self.theme = theme
+        self.entries: list[tk.Entry] = []
+        self.int_validation = self.root.register(lambda x: str.isdigit(x) or x == "")
+        self.headings = database.view_record_types(self.theme)
+        self.setup_gui()
+
+    def setup_gui(self):
+        for i, heading in enumerate(self.headings):
+            tk.Label(self.root, text=heading).grid(column=0, row=i)
+            entry = tk.Entry(
+                self.root, validate="all", validatecommand=(self.int_validation, "%P")
+            )
+            entry.grid(column=1, row=i)
+            self.entries.append(entry)
+        tk.Button(self.root, text="Add Record", command=self.add_record).grid(
+            row=len(self.headings), column=1, sticky="ew"
+        )
+        tk.Button(self.root, text="Cancel", command=lambda: self.root.destroy()).grid(
+            row=len(self.headings), column=0
+        )
+
+    def add_record(self):
+        user_entered_values = map(lambda x: x.get(), self.entries)
+        none_for_empty_string = map(
+            lambda x: None if x == "" else x, user_entered_values
+        )
+        values = {x: val for x, val in zip(self.headings, none_for_empty_string)}
+        database.Record(self.theme, datetime.now(), values).write_record()
+        self.root.destroy()
+
+    def wait(self):
+        self.root.grab_set()
+        self.root.wait_window()
 
 
 class BenchmarkTable(tk.Frame):
@@ -99,6 +132,7 @@ class RecordTable(tk.Frame):
     def insert_data(self):
         data = database.view_records(self.theme)
         if len(data) == 0:
+            self.tree.insert("", "end", values=("",))
             return
         headings = database.view_record_types(self.theme)
         self.setup_tree(headings)
@@ -110,8 +144,17 @@ class RecordTable(tk.Frame):
         # writing the data
         for record in data:
             date = record.datetime.strftime("%d/%m/%Y %H:%M:%S")
+
             self.tree.insert(
-                "", "end", values=(date, *(record.values.get(key) for key in headings))
+                "",
+                "end",
+                values=(
+                    date,
+                    *map(
+                        lambda x: "_" if x is None else x,
+                        (record.values.get(key) for key in headings),
+                    ),
+                ),
             )
 
     def refresh(self):
@@ -143,7 +186,7 @@ class Page(tk.Frame):
         tk.Button(self, command=self.create_record, text="Create Record").grid(
             column=1, row=1, sticky="w"
         )
-        tk.Button(self, command=self.create_record, text="Add").grid(
+        tk.Button(self, command=self.wait_for_record_entry, text="Add").grid(
             column=2, row=1, sticky="w"
         )
 
@@ -161,6 +204,10 @@ class Page(tk.Frame):
             int(self.bench_value_entry.get()),
         ).write_benchmark()
         self.benchmark_table.refresh()
+
+    def wait_for_record_entry(self):
+        RecordEntry(self.theme).wait()
+        self.record_table.refresh()
 
     def create_record(self):
         name = self.record_name_entry.get()
