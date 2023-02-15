@@ -11,7 +11,9 @@ class RecordEntry:
         self.root.resizable(False, False)
         self.theme = theme
         self.entries: list[tk.Entry] = []
-        self.int_validation = self.root.register(lambda x: str.isdigit(x) or x == "")
+        self.int_validation = self.root.register(
+            lambda x: x.replace(".", "", 1).isdigit() or x == ""
+        )
         self.headings = database.view_record_types(self.theme)
         self.setup_gui()
 
@@ -168,7 +170,9 @@ class Page(tk.Frame):
         self.record_table = RecordTable(theme=theme, master=self)
         self.benchmark_table = BenchmarkTable(theme=theme, master=self)
 
-        self.int_validation = self.register(lambda x: str.isdigit(x) or x == "")
+        self.int_validation = self.register(
+            lambda x: x.replace(".", "", 1).isdigit() or x == ""
+        )
 
         self.bench_name_entry = tk.Entry(self)
         self.bench_value_entry = tk.Entry(
@@ -200,7 +204,7 @@ class Page(tk.Frame):
             datetime.now(),
             self.theme,
             self.bench_name_entry.get(),
-            int(self.bench_value_entry.get()),
+            float(self.bench_value_entry.get()),
         ).write_benchmark()
         self.benchmark_table.refresh()
 
