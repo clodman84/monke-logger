@@ -5,6 +5,14 @@ from tkinter import ttk
 import database
 
 
+def delta(date: datetime) -> str:
+    # 'x days ago'
+    delta = abs(datetime.utcnow() - date)
+    d = delta.days if delta.days > 0 else 0
+    stringify = f"{int(d)} {'days' if d != 1 else 'day'} ago" if d > 0 else "Today"
+    return stringify
+
+
 class RecordEntry:
     def __init__(self, theme):
         self.root = tk.Toplevel()
@@ -88,7 +96,7 @@ class BenchmarkTable(tk.Frame):
                 text=sample.name,
                 index="end",
                 values=(
-                    "Last: " + sample.datetime.strftime("%d/%m/%Y"),
+                    "Last: " + delta(sample.datetime),
                     f"Average: {average:.2f}",
                 ),
             )
