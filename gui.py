@@ -8,7 +8,7 @@ import database
 def delta(date: datetime) -> str:
     # 'x days ago'
     delta = abs(datetime.utcnow() - date)
-    d = delta.days if delta.days > 0 else 0
+    d = delta.days
     stringify = f"{int(d)} {'days' if d != 1 else 'day'} ago" if d > 0 else "Today"
     return stringify
 
