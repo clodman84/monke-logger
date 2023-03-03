@@ -28,6 +28,10 @@ class ConnectionPool:
         return self.connection
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            self.connection.rollback()
+        else:
+            self.connection.commit()
         self._q.put(self.connection)
 
     @classmethod

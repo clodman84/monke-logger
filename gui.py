@@ -7,7 +7,7 @@ import database
 
 def delta(date: datetime) -> str:
     # 'x days ago'
-    d = abs(datetime.utcnow() - date).days
+    d = abs(datetime.now() - date).days
     return f"{int(d)} {'days' if d != 1 else 'day'} ago" if d > 0 else "Today"
 
 
