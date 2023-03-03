@@ -1,27 +1,39 @@
 import itertools
+import queue
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 
-
-def adapt_datetime_epoch(val: datetime):
-    """Adapt datetime.datetime to Unix timestamp."""
-    return int(val.timestamp())
-
-
-def convert_timestamp(val):
-    """Convert Unix epoch timestamp to datetime.datetime object."""
-    return datetime.fromtimestamp(int(val))
-
-
-sqlite3.register_adapter(datetime, adapt_datetime_epoch)
-sqlite3.register_converter("timestamp", convert_timestamp)
+sqlite3.register_adapter(datetime, lambda x: int(x.timestamp()))
+sqlite3.register_converter("timestamp", lambda x: datetime.fromtimestamp(int(x)))
 
 
 def connect() -> sqlite3.Connection:
     connection = sqlite3.connect("data.db", detect_types=sqlite3.PARSE_DECLTYPES)
     connection.execute("pragma foreign_keys = ON")
     return connection
+
+
+class ConnectionPool:
+    _q = queue.SimpleQueue()
+
+    def __init__(self):
+        self.connection = None
+
+    def __enter__(self) -> sqlite3.Connection:
+        try:
+            self.connection = self._q.get_nowait()
+        except queue.Empty:
+            self.connection = connect()
+        return self.connection
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._q.put(self.connection)
+
+    @classmethod
+    def close(cls):
+        while not cls._q.empty():
+            cls._q.get_nowait().close()
 
 
 @dataclass()
@@ -31,9 +43,9 @@ class Benchmark:
     name: str
     value: float
 
-    def write_benchmark(self, conn=None):
-        with conn if conn else connect() as connection:
-            create_benchmark(self.theme, self.name, connection)
+    def write_benchmark(self):
+        create_benchmark(self.theme, self.name)
+        with ConnectionPool() as connection:
             connection.execute(
                 f"INSERT INTO benchmarks VALUES(?, ?, ?, ?)",
                 (self.datetime, self.theme, self.name, self.value),
@@ -49,9 +61,9 @@ class Record:
     datetime: datetime
     values: dict
 
-    def write_record(self, conn=None):
+    def write_record(self):
         query = f"INSERT INTO records VALUES(?, ?, ?, ?)"
-        with conn if conn else connect() as connection:
+        with ConnectionPool() as connection:
             connection.executemany(
                 query,
                 tuple(
@@ -64,34 +76,34 @@ class Record:
         return f"{self.datetime.strftime('%d/%m/%Y %H:%M:%S')} | {self.theme} | {self.values}"
 
 
-def create_theme(theme: str, conn=None) -> None:
-    with conn if conn else connect() as connection:
+def create_theme(theme: str) -> None:
+    with ConnectionPool() as connection:
         connection.execute("INSERT OR IGNORE INTO themes VALUES(?)", (theme,))
 
 
-def create_record(theme, name, conn=None) -> None:
-    with conn if conn else connect() as connection:
+def create_record(theme, name) -> None:
+    with ConnectionPool() as connection:
         connection.execute(
             f"INSERT OR IGNORE INTO themes_records_bridge VALUES(?, ?)", (theme, name)
         )
 
 
-def create_benchmark(theme, name, conn=None) -> None:
-    with conn if conn else connect() as connection:
+def create_benchmark(theme, name) -> None:
+    with ConnectionPool() as connection:
         connection.execute(
             f"INSERT OR IGNORE INTO themes_benchmarks_bridge VALUES(?, ?)",
             (theme, name),
         )
 
 
-def view_themes(conn=None) -> list[str]:
-    with conn if conn else connect() as connection:
+def view_themes() -> list[str]:
+    with ConnectionPool() as connection:
         cursor = connection.execute("SELECT * FROM themes;")
     return list(itertools.chain(*cursor.fetchall()))
 
 
-def view_benchmarks(theme: str, conn=None) -> list[list[Benchmark]]:
-    with conn if conn else connect() as connection:
+def view_benchmarks(theme: str) -> list[list[Benchmark]]:
+    with ConnectionPool() as connection:
         cursor = connection.execute(
             f"SELECT * FROM benchmarks WHERE theme = ? ORDER BY benchmark_name, timestamp DESC",
             (theme,),
@@ -117,8 +129,8 @@ def view_records(theme: str) -> list[Record]:
     return grouped_records_by_timestamp
 
 
-def view_record_types(theme: str, conn=None):
-    with conn if conn else connect() as connection:
+def view_record_types(theme: str):
+    with ConnectionPool() as connection:
         cursor = connection.execute(
             "SELECT record_name from themes_records_bridge WHERE theme = ?", (theme,)
         )

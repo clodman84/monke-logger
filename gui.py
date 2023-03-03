@@ -7,10 +7,8 @@ import database
 
 def delta(date: datetime) -> str:
     # 'x days ago'
-    delta = abs(datetime.utcnow() - date)
-    d = delta.days
-    stringify = f"{int(d)} {'days' if d != 1 else 'day'} ago" if d > 0 else "Today"
-    return stringify
+    d = abs(datetime.utcnow() - date).days
+    return f"{int(d)} {'days' if d != 1 else 'day'} ago" if d > 0 else "Today"
 
 
 class RecordEntry:
@@ -272,3 +270,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    database.ConnectionPool.close()
