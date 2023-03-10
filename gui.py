@@ -7,8 +7,12 @@ import database
 
 def delta(date: datetime) -> str:
     # 'x days ago'
-    d = abs(datetime.now() - date).days
-    return f"{int(d)} {'days' if d != 1 else 'day'} ago" if d > 0 else "Today"
+    d = abs(datetime.now() - date)
+    return (
+        f"{d.days} {'days' if d.days != 1 else 'day'} ago"
+        if d.days > 0
+        else f"{d.total_seconds() / 3600:.2f} hours ago"
+    )
 
 
 class RecordEntry:
