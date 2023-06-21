@@ -1,4 +1,3 @@
-import itertools
 import queue
 import sqlite3
 from dataclasses import dataclass
@@ -40,105 +39,105 @@ class ConnectionPool:
             cls._q.get_nowait().close()
 
 
-@dataclass()
-class Benchmark:
-    datetime: datetime
-    theme: str
+@dataclass
+class Theme:
+    id: int
+    created_on: datetime
     name: str
-    value: float
 
-    def write_benchmark(self):
-        create_benchmark(self.theme, self.name)
+    @classmethod
+    def new(cls, created_on: datetime, name: str):
         with ConnectionPool() as connection:
             connection.execute(
-                f"INSERT INTO benchmarks VALUES(?, ?, ?, ?)",
-                (self.datetime, self.theme, self.name, self.value),
+                "INSERT INTO themes VALUES(?, ?, ?)",
+                (None, created_on, name),
+            )
+        with ConnectionPool() as connection:
+            cursor = connection.execute(
+                "SELECT * FROM themes WHERE created_on = ? AND name = ?",
+                (created_on, name),
+            )
+        return cls(*cursor.fetchone())
+
+    def get_types(self, display_type):
+        with ConnectionPool() as connection:
+            cursor = connection.execute(
+                "SELECT * FROM types WHERE theme_id = ? AND display_type = ? ORDER BY created_on DESC",
+                (self.id, display_type),
+            )
+        return [DataType(*row) for row in cursor.fetchall()]
+
+
+@dataclass
+class DataPoint:
+    type_id: int
+    created_on: datetime
+    timestamp: datetime
+    val: int | float
+
+    def write(self) -> None:
+        with ConnectionPool() as connection:
+            connection.execute(
+                "INSERT INTO data VALUES(?, ?, ?, ?)",
+                (self.type_id, self.created_on, self.timestamp, self.val),
             )
 
     def __str__(self):
-        return f"{self.datetime.strftime('%d/%m/%Y %H:%M:%S')} | {self.theme} | {self.value}"
+        return f"Type: {self.type_id} Value: {self.val}"
 
 
-@dataclass()
-class Record:
-    theme: str
-    datetime: datetime
-    values: dict
+@dataclass
+class DataType:
+    id: int
+    created_on: datetime
+    theme: Theme
+    name: str
+    unit: str
+    display_type: str
+    representation: str
 
-    def write_record(self):
-        query = f"INSERT INTO records VALUES(?, ?, ?, ?)"
+    @classmethod
+    def new(
+        cls,
+        created_on,
+        theme: Theme,
+        name,
+        unit=None,
+        display_type=None,
+        representation=None,
+    ):
         with ConnectionPool() as connection:
-            connection.executemany(
-                query,
-                tuple(
-                    (self.datetime, self.theme, key, value)
-                    for key, value in self.values.items()
+            connection.execute(
+                "INSERT OR IGNORE INTO types VALUES(?, ?, ?, ?, ?, ?, ?)",
+                (
+                    None,
+                    created_on,
+                    theme.id,
+                    name,
+                    unit,
+                    display_type,
+                    representation,
                 ),
             )
+        with ConnectionPool() as connection:
+            cursor = connection.execute(
+                "SELECT * FROM types WHERE name = ? AND theme_id = ?", (name, theme.id)
+            )
+            return cls(*cursor.fetchone())
 
-    def __str__(self):
-        return f"{self.datetime.strftime('%d/%m/%Y %H:%M:%S')} | {self.theme} | {self.values}"
-
-
-def create_theme(theme: str) -> None:
-    with ConnectionPool() as connection:
-        connection.execute("INSERT OR IGNORE INTO themes VALUES(?)", (theme,))
-
-
-def create_record(theme, name) -> None:
-    with ConnectionPool() as connection:
-        connection.execute(
-            f"INSERT OR IGNORE INTO themes_records_bridge VALUES(?, ?)", (theme, name)
-        )
+    def get_data_points(self) -> list[DataPoint]:
+        with ConnectionPool() as connection:
+            cursor = connection.execute(
+                "SELECT * FROM data WHERE type_id = ? ORDER BY timestamp DESC",
+                (self.id,),
+            )
+            return [DataPoint(*row) for row in cursor.fetchall()]
 
 
-def create_benchmark(theme, name) -> None:
-    with ConnectionPool() as connection:
-        connection.execute(
-            f"INSERT OR IGNORE INTO themes_benchmarks_bridge VALUES(?, ?)",
-            (theme, name),
-        )
-
-
-def view_themes() -> list[str]:
+def get_all_themes() -> list[Theme]:
     with ConnectionPool() as connection:
         cursor = connection.execute("SELECT * FROM themes;")
-    return list(itertools.chain(*cursor.fetchall()))
-
-
-def view_benchmarks(theme: str) -> list[list[Benchmark]]:
-    with ConnectionPool() as connection:
-        cursor = connection.execute(
-            f"SELECT * FROM benchmarks WHERE theme = ? ORDER BY benchmark_name, timestamp DESC",
-            (theme,),
-        )
-        benchmarks = [Benchmark(*row) for row in cursor.fetchall()]
-    # splitting the benchmarks by name
-    sorted_benchmarks = [
-        list(group) for _, group in itertools.groupby(benchmarks, key=lambda x: x.name)
-    ]
-    return sorted_benchmarks
-
-
-def view_records(theme: str) -> list[Record]:
-    with connect() as connection:
-        cursor = connection.execute(
-            f"SELECT * FROM records WHERE theme = ? ORDER BY timestamp", (theme,)
-        )
-    grouped_records_by_timestamp = [
-        Record(theme, t, {x[2]: x[3] for x in group})
-        for t, group in itertools.groupby(cursor.fetchall(), key=lambda x: x[0])
-    ]
-    connection.close()
-    return grouped_records_by_timestamp
-
-
-def view_record_types(theme: str):
-    with ConnectionPool() as connection:
-        cursor = connection.execute(
-            "SELECT record_name from themes_records_bridge WHERE theme = ?", (theme,)
-        )
-    return list(itertools.chain(*cursor.fetchall()))
+    return list(map(lambda x: Theme(*x), cursor.fetchall()))
 
 
 def setup_db():

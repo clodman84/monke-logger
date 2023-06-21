@@ -1,33 +1,25 @@
 CREATE TABLE IF NOT EXISTS themes(
-    theme TEXT PRIMARY KEY
+    id INTEGER PRIMARY KEY,
+    created_on TIMESTAMP,
+    name TEXT
 );
 
-CREATE TABLE IF NOT EXISTS themes_records_bridge(
-    theme TEXT,
-    record_name TEXT,
-    CONSTRAINT themes_records_pk PRIMARY KEY (theme, record_name),
-    CONSTRAINT theme_fk FOREIGN KEY (theme) REFERENCES themes (theme)
+CREATE TABLE IF NOT EXISTS types(
+    id INTEGER PRIMARY KEY,
+    created_on TIMESTAMP,
+    theme_id INTEGER,
+    name TEXT,
+    unit TEXT,
+    display_type TEXT, --Record/Benchmark
+    representation TEXT, --Time/T_Interval/Percentages/Accurate Time/Custom, etc
+    CONSTRAINT theme_type_fk FOREIGN KEY (theme_id) REFERENCES themes (id) ON DELETE CASCADE,
+    UNIQUE(name, theme_id)
 );
 
-CREATE TABLE IF NOT EXISTS themes_benchmarks_bridge(
-    theme TEXT,
-    benchmark_name TEXT,
-    CONSTRAINT benchmark_name_pk PRIMARY KEY (theme, benchmark_name),
-    CONSTRAINT benchmark_fk FOREIGN KEY (theme) REFERENCES themes (theme)
-);
-
-CREATE TABLE IF NOT EXISTS records(
+CREATE TABLE IF NOT EXISTS data(
+    type_id INTEGER,
+    created_on TIMESTAMP,
     timestamp TIMESTAMP,
-    theme TEXT,
-    record_name TEXT,
-    value INTEGER,
-    CONSTRAINT record_name_fk FOREIGN KEY (theme, record_name) REFERENCES themes_records_bridge (theme, record_name)
-);
-
-CREATE TABLE IF NOT EXISTS benchmarks(
-    timestamp TIMESTAMP,
-    theme TEXT,
-    benchmark_name TEXT,
-    value INTEGER,
-    CONSTRAINT benchmark_name_fk FOREIGN KEY (theme, benchmark_name) REFERENCES themes_benchmarks_bridge (theme, benchmark_name)
+    val INTEGER,
+    CONSTRAINT data_type_fk FOREIGN KEY (type_id) REFERENCES types (id) ON DELETE CASCADE
 );

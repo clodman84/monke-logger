@@ -1,3 +1,4 @@
+import itertools
 import tkinter as tk
 from datetime import datetime
 from tkinter import ttk
@@ -7,7 +8,7 @@ import database
 
 def delta(date: datetime) -> str:
     # 'x days ago'
-    d = abs(datetime.now() - date)
+    d = abs(datetime.utcnow() - date)
     return (
         f"{d.days} {'days' if d.days != 1 else 'day'} ago"
         if d.days > 0
@@ -16,7 +17,7 @@ def delta(date: datetime) -> str:
 
 
 class RecordEntry:
-    def __init__(self, theme):
+    def __init__(self, theme: database.Theme):
         self.root = tk.Toplevel()
         self.root.resizable(False, False)
         self.theme = theme
@@ -24,7 +25,8 @@ class RecordEntry:
         self.int_validation = self.root.register(
             lambda x: x.replace(".", "", 1).isdigit() or x == ""
         )
-        self.headings = database.view_record_types(self.theme)
+        self.types = self.theme.get_types(display_type="record")
+        self.headings = [i.name for i in self.types]
         self.setup_gui()
 
     def setup_gui(self):
@@ -43,12 +45,13 @@ class RecordEntry:
         )
 
     def add_record(self):
+        now = datetime.utcnow()
         user_entered_values = map(lambda x: x.get(), self.entries)
         none_for_empty_string = map(
             lambda x: None if x == "" else x, user_entered_values
         )
-        values = {x: val for x, val in zip(self.headings, none_for_empty_string)}
-        database.Record(self.theme, datetime.now(), values).write_record()
+        for i, val in zip(self.types, none_for_empty_string):
+            database.DataPoint(i.id, now, now, val).write()  # second now can change
         self.root.destroy()
 
     def wait(self):
@@ -57,7 +60,7 @@ class RecordEntry:
 
 
 class BenchmarkTable(tk.Frame):
-    def __init__(self, *args, theme, **kwargs):
+    def __init__(self, *args, theme: database.Theme, **kwargs):
         super(BenchmarkTable, self).__init__(*args, **kwargs)
         self.theme = theme
         self.tree = ttk.Treeview(self)
@@ -74,6 +77,7 @@ class BenchmarkTable(tk.Frame):
         self.tree.destroy()
         self.tree = ttk.Treeview(self)
         self.tree.pack(side="left", expand=True, fill="both")
+        self.scroll_bar.configure(command=self.tree.yview)
         self.setup_tree()
 
     def setup_tree(self):
@@ -85,30 +89,30 @@ class BenchmarkTable(tk.Frame):
         self.tree.heading("value", text="Value")
 
     def insert_data(self):
-        data: list[list[database.Benchmark]] = database.view_benchmarks(self.theme)
+        benchmark_types: list[database.DataType] = self.theme.get_types("benchmark")
 
-        if len(data) == 0:
+        if len(benchmark_types) == 0:
             return
 
-        for activity in data:
-            sample = activity[0]
-            average = sum(bench.value for bench in activity) / len(activity)
+        for activity in benchmark_types:
+            datapoints = activity.get_data_points()
+            average = sum(bench.val for bench in datapoints) / len(datapoints)
             root_node = self.tree.insert(
                 "",
-                text=sample.name,
+                text=activity.name,
                 index="end",
                 values=(
-                    "Last: " + delta(sample.datetime),
+                    "Last: " + delta(datapoints[0].timestamp),
                     f"Average: {average:.2f}",
                 ),
             )
-            for benchmark in activity:
-                date = benchmark.datetime.strftime("%d/%m/%Y %H:%M:%S")
+            for benchmark in datapoints:
+                date = benchmark.timestamp.strftime("%d/%m/%Y %H:%M:%S")
                 self.tree.insert(
                     root_node,
                     "end",
-                    text=benchmark.name,
-                    values=(date, benchmark.value),
+                    text=activity.name,
+                    values=(date, benchmark.val),
                 )
 
     def refresh(self):
@@ -117,7 +121,7 @@ class BenchmarkTable(tk.Frame):
 
 
 class RecordTable(tk.Frame):
-    def __init__(self, *args, theme, **kwargs):
+    def __init__(self, *args, theme: database.Theme, **kwargs):
         super(RecordTable, self).__init__(*args, **kwargs)
         self.theme = theme
         self.tree = ttk.Treeview(self, selectmode="browse")
@@ -132,6 +136,7 @@ class RecordTable(tk.Frame):
         self.tree.destroy()
         self.tree = ttk.Treeview(self, selectmode="browse")
         self.tree.pack(side="left", expand=True, fill="both")
+        self.scroll_bar.configure(command=self.tree.yview)
 
     def setup_tree(self, headings):
         self.tree.configure(yscrollcommand=self.scroll_bar.set)
@@ -142,29 +147,43 @@ class RecordTable(tk.Frame):
         self.tree.heading("date", text="Date")
 
     def insert_data(self):
-        data = database.view_records(self.theme)
-        if len(data) == 0:
+        record_types = self.theme.get_types("record")
+
+        if len(record_types) == 0:
             self.tree.insert("", "end", values=("Nothing to show...",))
-        headings = database.view_record_types(self.theme)
+
+        headings = [i.name for i in record_types]
         self.setup_tree(headings)
+
         # adding the headings for Record.values dictionary
         for i, heading in enumerate(headings):
             self.tree.column(str(i), width=90, anchor="c")
             self.tree.heading(str(i), text=heading.capitalize())
 
-        # writing the data
-        for record in data:
-            date = record.datetime.strftime("%d/%m/%Y %H:%M:%S")
+        data = itertools.chain.from_iterable(
+            [record_type.get_data_points() for record_type in record_types]
+        )
+        data = sorted(list(data), key=lambda x: x.timestamp)
+        data = itertools.groupby(data, key=lambda x: x.timestamp)
+        type_ids = [i.id for i in record_types]
 
+        for t, group in data:
+            record = []
+            datapoints: list[database.DataPoint] = list(group)
+            for type_id in type_ids:
+                val = next(
+                    (data.val or "_" for data in datapoints if data.type_id == type_id),
+                    "_",
+                )
+                record.append(val)
+
+            date = t.strftime("%d/%m/%Y %H:%M:%S")
             self.tree.insert(
                 "",
                 "end",
                 values=(
                     date,
-                    *map(
-                        lambda x: "_" if x is None else x,
-                        (record.values.get(key) for key in headings),
-                    ),
+                    *record,
                 ),
             )
 
@@ -174,7 +193,7 @@ class RecordTable(tk.Frame):
 
 
 class Page(tk.Frame):
-    def __init__(self, *args, theme: str, **kwargs):
+    def __init__(self, *args, theme: database.Theme, **kwargs):
         super(Page, self).__init__(*args, **kwargs)
         self.theme = theme
         self.record_table = RecordTable(theme=theme, master=self)
@@ -210,12 +229,19 @@ class Page(tk.Frame):
         tk.Button(self, command=self.add_benchmark, text="Add").grid(column=8, row=1)
 
     def add_benchmark(self):
-        database.Benchmark(
-            datetime.now(),
-            self.theme,
-            self.bench_name_entry.get(),
-            float(self.bench_value_entry.get()),
-        ).write_benchmark()
+        now = datetime.utcnow()
+        benchmark_type = database.DataType.new(
+            created_on=now,
+            theme=self.theme,
+            name=self.bench_name_entry.get(),
+            display_type="benchmark",
+        )
+        database.DataPoint(
+            type_id=benchmark_type.id,
+            created_on=now,
+            timestamp=now,
+            val=float(self.bench_value_entry.get()),
+        ).write()
         self.benchmark_table.refresh()
 
     def wait_for_record_entry(self):
@@ -223,8 +249,11 @@ class Page(tk.Frame):
         self.record_table.refresh()
 
     def create_record(self):
+        now = datetime.utcnow()
         name = self.record_name_entry.get()
-        database.create_record(self.theme, name)
+        database.DataType.new(
+            created_on=now, theme=self.theme, name=name, display_type="record"
+        )
         self.record_table.refresh()
 
 
@@ -232,11 +261,11 @@ def main():
     root = tk.Tk()
     note_book = ttk.Notebook(master=root)
 
-    themes = database.view_themes()
+    themes = database.get_all_themes()
     for theme in themes:
         page = Page(master=note_book, theme=theme)
         page.grid(column=0, row=0, sticky="ew")
-        note_book.add(page, text=theme.capitalize())
+        note_book.add(page, text=theme.name.capitalize())
 
     new_theme_frame = tk.Frame(note_book)
 
@@ -251,18 +280,19 @@ def main():
     text_box["textvariable"] = contents
 
     def make_theme():
-        requested_theme = contents.get()
-        if requested_theme.lower() in themes:
+        name = contents.get()
+        if name.lower() in themes:
             return
+        now = datetime.utcnow()
         # register the theme in the database
-        database.create_theme(requested_theme)
+        requested_theme = database.Theme.new(now, name)
 
         # add the theme to the list so that it can't be made again
         themes.append(requested_theme)
 
         # update the notebook with a page for the theme
         theme_page = Page(master=note_book, theme=requested_theme)
-        note_book.insert(0, theme_page, text=requested_theme.capitalize())
+        note_book.insert(0, theme_page, text=requested_theme.name.capitalize())
 
     tk.Button(new_theme_frame, command=make_theme, text="Create").grid(column=3, row=0)
     note_book.add(new_theme_frame, text="+")
