@@ -1,6 +1,6 @@
 import itertools
 import tkinter as tk
-from datetime import datetime
+from datetime import datetime, timezone
 from tkinter import ttk
 
 import database
@@ -14,6 +14,10 @@ def delta(date: datetime) -> str:
         if d.days > 0
         else f"{d.total_seconds() / 3600:.2f} hours ago"
     )
+
+
+def localise(date: datetime):
+    return date.replace(tzinfo=timezone.utc).astimezone(tz=None)
 
 
 class RecordEntry:
@@ -107,7 +111,7 @@ class BenchmarkTable(tk.Frame):
                 ),
             )
             for benchmark in datapoints:
-                date = benchmark.timestamp.strftime("%d/%m/%Y %H:%M:%S")
+                date = localise(benchmark.timestamp).strftime("%d/%m/%Y %H:%M:%S")
                 self.tree.insert(
                     root_node,
                     "end",
@@ -177,7 +181,7 @@ class RecordTable(tk.Frame):
                 )
                 record.append(val)
 
-            date = t.strftime("%d/%m/%Y %H:%M:%S")
+            date = localise(t).strftime("%d/%m/%Y %H:%M:%S")
             self.tree.insert(
                 "",
                 "end",
