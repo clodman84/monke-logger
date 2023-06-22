@@ -270,11 +270,30 @@ def main():
     dpg.create_context()
     dpg.create_viewport(title="MonkeLogger", width=600, height=600)
 
+    themes = database.get_all_themes()
+
+    def make_theme():
+        name = dpg.get_value("new_theme_input")
+        if name.lower() in (t.name.lower() for t in themes):
+            return
+        now = datetime.utcnow()
+        # register the theme in the database
+        requested_theme = database.Theme.new(now, name)
+        # add the theme to the list so that it can't be made again
+        themes.append(requested_theme)
+        # update the notebook with a page for the theme
+        ThemeTab(theme=requested_theme, parent="theme_tab")
+
     with dpg.window(tag="Primary Window"):
-        themes = database.get_all_themes()
-        with dpg.tab_bar() as tb:
+        with dpg.tab_bar(tag="theme_tab"):
             for theme in themes:
-                ThemeTab(theme, parent=tb)
+                ThemeTab(theme, parent="theme_tab")
+            with dpg.tab(label="+", order_mode=dpg.mvTabOrder_Trailing):
+                with dpg.child_window():
+                    with dpg.group(horizontal=True):
+                        dpg.add_text("Name")
+                        dpg.add_input_text(tag="new_theme_input")
+                        dpg.add_button(label="Create", callback=make_theme)
 
     dpg.setup_dearpygui()
     dpg.show_viewport()
