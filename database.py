@@ -8,7 +8,9 @@ sqlite3.register_converter("timestamp", lambda x: datetime.fromtimestamp(int(x))
 
 
 def connect() -> sqlite3.Connection:
-    connection = sqlite3.connect("data.db", detect_types=sqlite3.PARSE_DECLTYPES)
+    connection = sqlite3.connect(
+        "data.db", detect_types=sqlite3.PARSE_DECLTYPES, check_same_thread=False
+    )
     connection.execute("pragma foreign_keys = ON")
     return connection
 
@@ -65,7 +67,7 @@ class Theme:
                 "SELECT * FROM types WHERE theme_id = ? AND display_type = ? ORDER BY created_on DESC",
                 (self.id, display_type),
             )
-        return [DataType(*row) for row in cursor.fetchall()]
+        return [DataType(*row[:2], self, *row[3:]) for row in cursor.fetchall()]
 
 
 @dataclass
@@ -123,12 +125,13 @@ class DataType:
             cursor = connection.execute(
                 "SELECT * FROM types WHERE name = ? AND theme_id = ?", (name, theme.id)
             )
-            return cls(*cursor.fetchone())
+            row = cursor.fetchone()
+            return cls(*row[:2], theme, *row[3:])
 
     def get_data_points(self) -> list[DataPoint]:
         with ConnectionPool() as connection:
             cursor = connection.execute(
-                "SELECT * FROM data WHERE type_id = ? ORDER BY timestamp DESC",
+                "SELECT * FROM data WHERE type_id = ? ORDER BY timestamp ASC",
                 (self.id,),
             )
             return [DataPoint(*row) for row in cursor.fetchall()]
