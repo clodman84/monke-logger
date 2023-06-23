@@ -10,6 +10,21 @@ def localise(date: datetime):
     return date.replace(tzinfo=timezone.utc).astimezone(tz=None)
 
 
+def setup_plot(datatype: database.DataType):
+    data = datatype.get_data_points()
+    x_axis = [i.timestamp.timestamp() for i in data]
+    y_axis = [i.val for i in data]
+    with dpg.window(
+        no_close=True, label=datatype.name, width=600, height=300
+    ) as window:
+        dpg.add_button(label="Close", callback=lambda: dpg.delete_item(window))
+        with dpg.plot(label=datatype.name, width=-1, height=-1):
+            y_tag = f"{datatype.id, datatype.theme.id}_y_axis"
+            dpg.add_plot_axis(dpg.mvXAxis, label="x", time=True)
+            dpg.add_plot_axis(dpg.mvYAxis, label="y", tag=y_tag)
+            dpg.add_line_series(x_axis, y_axis, label=datatype.name, parent=y_tag)
+
+
 class BenchmarkTable:
     def __init__(self, theme: database.Theme, parent):
         self.theme = theme
@@ -27,6 +42,18 @@ class BenchmarkTable:
             datapoints = activity.get_data_points()
             average = sum(bench.val for bench in datapoints) / len(datapoints)
             with dpg.tree_node(parent=self.parent, label=activity.name):
+
+                def make_show_plot_function(act=activity):
+                    # this is necessary due to python's late binding closures
+                    # without this function factory the callback would use the last activity in this loop
+                    # in the callback for dpg.add_button
+                    # https://docs.python-guide.org/writing/gotchas/#late-binding-closures
+                    def f():
+                        setup_plot(act)
+
+                    return f
+
+                dpg.add_button(label="Show Plot", callback=make_show_plot_function())
                 with dpg.table(tag=f"{activity.id, activity.theme.id}"):
                     dpg.add_table_column(label="Date")
                     avg_heading = dpg.add_table_column(label=f"Average: {average:.2f}")
